@@ -1,5 +1,7 @@
 package com.imaginarycode.minecraft.redisbungee;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.*;
 import com.google.common.io.ByteStreams;
 import com.google.gson.Gson;
@@ -64,7 +66,9 @@ public final class RedisBungee extends Plugin {
     private LuaManager.Script getServerPlayersScript;
 
     private static final Object SERVER_TO_PLAYERS_KEY = new Object();
-    private final InternalCache<Object, Multimap<String, UUID>> serverToPlayersCache = new InternalCache<>(2000);
+    private final Cache<Object, Multimap<String, UUID>> serverToPlayersCache = CacheBuilder.newBuilder()
+            .expireAfterWrite(5, TimeUnit.SECONDS)
+            .build();
 
     /**
      * Fetch the {@link RedisBungeeAPI} object created on plugin start.
@@ -199,7 +203,12 @@ public final class RedisBungee extends Plugin {
 
     final Set<UUID> getPlayersOnServer(@NonNull String server) {
         checkArgument(getProxy().getServers().containsKey(server), "server does not exist");
-        return ImmutableSet.copyOf((Collection<UUID>) getServerPlayersScript.eval(ImmutableList.<String>of(), ImmutableList.<String>of(server)));
+        Collection<String> asStrings = (Collection<String>) getServerPlayersScript.eval(ImmutableList.<String>of(), ImmutableList.<String>of(server));
+        ImmutableSet.Builder<UUID> builder = ImmutableSet.builder();
+        for (String s : asStrings) {
+            builder.add(UUID.fromString(s));
+        }
+        return builder.build();
     }
 
     final void sendProxyCommand(@NonNull String proxyId, @NonNull String command) {
